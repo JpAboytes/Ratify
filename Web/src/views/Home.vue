@@ -50,7 +50,12 @@
         </div>
         
         <div v-else class="albums-grid">
-          <div v-for="album in albums" :key="album.id" class="album-card">
+          <div 
+            v-for="album in albums" 
+            :key="album.id" 
+            @click="openAlbumModal(album)"
+            class="album-card"
+          >
             <div class="album-cover">
               <img 
                 v-if="album.images && album.images[0]" 
@@ -75,6 +80,14 @@
           </div>
         </div>
       </div>
+
+      <!-- Album Modal -->
+      <AlbumModal 
+        v-if="selectedAlbum"
+        :album="selectedAlbum"
+        @close="selectedAlbum = null"
+        @rate="handleRating"
+      />
 
       <!-- Stats Section -->
       <div class="stats-section">
@@ -106,12 +119,14 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { spotifyApi } from '../services/spotify'
+import AlbumModal from '../components/AlbumModal.vue'
 
 const router = useRouter()
 const { user, signOut } = useAuth()
 const searchQuery = ref('')
 const albums = ref([])
 const loading = ref(false)
+const selectedAlbum = ref(null)
 
 onMounted(async () => {
   await loadNewReleases()
@@ -144,6 +159,15 @@ const searchAlbums = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const openAlbumModal = (album) => {
+  selectedAlbum.value = album
+}
+
+const handleRating = ({ albumId, rating }) => {
+  console.log(`Álbum ${albumId} calificado con ${rating} estrellas`)
+  // Aquí puedes guardar la calificación en Firebase o tu base de datos
 }
 
 const handleLogout = async () => {
