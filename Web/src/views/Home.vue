@@ -87,6 +87,7 @@
         :album="selectedAlbum"
         @close="selectedAlbum = null"
         @rate="handleRating"
+        @comment="handleComment"
       />
 
       <!-- Stats Section -->
@@ -95,17 +96,17 @@
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon">📀</div>
-            <div class="stat-value">0</div>
+            <div class="stat-value">{{ stats.totalRatings }}</div>
             <div class="stat-label">Álbumes Calificados</div>
           </div>
           <div class="stat-card">
             <div class="stat-icon">⭐</div>
-            <div class="stat-value">0.0</div>
+            <div class="stat-value">{{ stats.averageRating }}</div>
             <div class="stat-label">Calificación Promedio</div>
           </div>
           <div class="stat-card">
             <div class="stat-icon">🎧</div>
-            <div class="stat-value">0</div>
+            <div class="stat-value">{{ stats.uniqueArtists }}</div>
             <div class="stat-label">Artistas Únicos</div>
           </div>
         </div>
@@ -119,6 +120,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { spotifyApi } from '../services/spotify'
+import { getUserStats } from '../services/ratingService'
 import AlbumModal from '../components/AlbumModal.vue'
 
 const router = useRouter()
@@ -127,15 +129,21 @@ const searchQuery = ref('')
 const albums = ref([])
 const loading = ref(false)
 const selectedAlbum = ref(null)
+const stats = ref({
+  totalRatings: 0,
+  averageRating: 0,
+  uniqueArtists: 0
+})
 
 onMounted(async () => {
   await loadNewReleases()
+  await loadUserStats()
 })
 
 const loadNewReleases = async () => {
   loading.value = true
   try {
-    const response = await spotifyApi.getNewReleases(20)
+    const response = await spotifyApi.getNewReleases(50)
     albums.value = response.albums.items
   } catch (error) {
     console.error('Error al cargar álbumes:', error)
@@ -161,13 +169,29 @@ const searchAlbums = async () => {
   }
 }
 
+const loadUserStats = async () => {
+  if (!user.value?.uid) return
+  
+  try {
+    const userStats = await getUserStats(user.value.uid)
+    stats.value = userStats
+  } catch (error) {
+    console.error('Error al cargar estadísticas:', error)
+  }
+}
+
 const openAlbumModal = (album) => {
   selectedAlbum.value = album
 }
 
-const handleRating = ({ albumId, rating }) => {
+const handleRating = async ({ albumId, rating }) => {
   console.log(`Álbum ${albumId} calificado con ${rating} estrellas`)
-  // Aquí puedes guardar la calificación en Firebase o tu base de datos
+  await loadUserStats()
+}
+
+const handleComment = async ({ albumId, comment, rating }) => {
+  console.log(`Comentario para álbum ${albumId}:`, comment, `Rating: ${rating}`)
+  await loadUserStats()
 }
 
 const handleLogout = async () => {

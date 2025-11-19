@@ -44,6 +44,25 @@
               Tu calificación: {{ userRating }} / 5
             </p>
           </div>
+
+          <!-- Comment Section -->
+          <div class="comment-section">
+            <h3>Deja tu comentario</h3>
+            <textarea 
+              v-model="userComment"
+              placeholder="Escribe tu opinión sobre este álbum..."
+              class="comment-input"
+              rows="4"
+            ></textarea>
+            <button 
+              @click="saveComment"
+              :disabled="!userComment.trim()"
+              class="save-comment-button"
+            >
+              Guardar Comentario
+            </button>
+            <p v-if="commentSaved" class="comment-saved">✓ Comentario guardado</p>
+          </div>
         </div>
       </div>
 
@@ -81,6 +100,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { spotifyApi } from '../services/spotify'
+import { useAuth } from '../composables/useAuth'
+import { saveRating, getAlbumRating } from '../services/ratingService'
 
 const props = defineProps({
   album: {
@@ -89,15 +110,20 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'rate'])
+const emit = defineEmits(['close', 'rate', 'comment'])
 
+const { user } = useAuth()
 const tracks = ref([])
 const loading = ref(false)
 const userRating = ref(0)
 const hoverRating = ref(0)
+const userComment = ref('')
+const commentSaved = ref(false)
+const saving = ref(false)
 
 onMounted(async () => {
   await loadAlbumDetails()
+  await loadExistingRating()
 })
 
 const loadAlbumDetails = async () => {
@@ -112,9 +138,71 @@ const loadAlbumDetails = async () => {
   }
 }
 
-const setRating = (rating) => {
+const loadExistingRating = async () => {
+  if (!user.value?.uid) return
+  
+  try {
+    const existingRating = await getAlbumRating(user.value.uid, props.album.id)
+    if (existingRating) {
+      userRating.value = existingRating.rating
+      userComment.value = existingRating.comment || ''
+    }
+  } catch (error) {
+    console.error('Error al cargar rating existente:', error)
+  }
+}
+
+const setRating = async (rating) => {
   userRating.value = rating
-  emit('rate', { albumId: props.album.id, rating })
+  
+  if (!user.value?.uid) return
+  
+  try {
+    await saveRating({
+      userId: user.value.uid,
+      albumId: props.album.id,
+      albumName: props.album.name,
+      artistName: props.album.artists?.map(a => a.name).join(', ') || 'Unknown',
+      albumImage: props.album.images?.[0]?.url || '',
+      rating,
+      comment: userComment.value
+    })
+    emit('rate', { albumId: props.album.id, rating })
+  } catch (error) {
+    console.error('Error al guardar rating:', error)
+  }
+}
+
+const saveComment = async () => {
+  if (!userComment.value.trim() || !user.value?.uid) return
+  
+  saving.value = true
+  try {
+    await saveRating({
+      userId: user.value.uid,
+      albumId: props.album.id,
+      albumName: props.album.name,
+      artistName: props.album.artists?.map(a => a.name).join(', ') || 'Unknown',
+      albumImage: props.album.images?.[0]?.url || '',
+      rating: userRating.value,
+      comment: userComment.value
+    })
+    
+    emit('comment', { 
+      albumId: props.album.id, 
+      comment: userComment.value,
+      rating: userRating.value 
+    })
+    
+    commentSaved.value = true
+    setTimeout(() => {
+      commentSaved.value = false
+    }, 3000)
+  } catch (error) {
+    console.error('Error al guardar comentario:', error)
+  } finally {
+    saving.value = false
+  }
 }
 
 const closeModal = () => {
@@ -265,6 +353,71 @@ const formatDuration = (ms) => {
   color: #667eea;
   font-weight: 600;
   font-size: 1rem;
+}
+
+/* Comment Section */
+.comment-section {
+  margin-top: 30px;
+  padding-top: 30px;
+  border-top: 1px solid #333;
+}
+
+.comment-section h3 {
+  color: #fff;
+  font-size: 1.2rem;
+  margin: 0 0 15px;
+}
+
+.comment-input {
+  width: 100%;
+  background: #000;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px;
+  color: #fff;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: all 0.3s ease;
+}
+
+.comment-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.comment-input::placeholder {
+  color: #666;
+}
+
+.save-comment-button {
+  margin-top: 15px;
+  padding: 10px 24px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.save-comment-button:hover:not(:disabled) {
+  background: #5568d3;
+  transform: translateY(-2px);
+}
+
+.save-comment-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comment-saved {
+  margin-top: 10px;
+  color: #1DB954;
+  font-weight: 600;
 }
 
 /* Tracks Section */
