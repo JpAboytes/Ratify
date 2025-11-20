@@ -3,6 +3,7 @@ import { getAuth } from 'firebase/auth'
 import Login from '../views/Login.vue'
 import Home from '../views/Home.vue'
 import Callback from '../views/Callback.vue'
+import MyRatings from '../views/MyRatings.vue'
 
 const routes = [
   {
@@ -15,6 +16,12 @@ const routes = [
     path: '/home',
     name: 'Home',
     component: Home,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/my-ratings',
+    name: 'MyRatings',
+    component: MyRatings,
     meta: { requiresAuth: true }
   },
   {

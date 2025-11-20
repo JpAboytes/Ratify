@@ -40,6 +40,32 @@
         </div>
       </div>
 
+      <br></br>
+
+      <!-- Stats Section -->
+      <div class="stats-section">
+        <h3>Tus Estadísticas</h3>
+        <div class="stats-grid">
+          <div class="stat-card clickable" @click="goToMyRatings">
+            <div class="stat-icon">📀</div>
+            <div class="stat-value">{{ stats.totalRatings }}</div>
+            <div class="stat-label">Álbumes Calificados</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-value">{{ stats.averageRating }}</div>
+            <div class="stat-label">Calificación Promedio</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🎧</div>
+            <div class="stat-value">{{ stats.uniqueArtists }}</div>
+            <div class="stat-label">Artistas Únicos</div>
+          </div>
+        </div>
+      </div>
+
+      <br></br>
+
       <!-- Albums -->
       <div class="albums-section">
         <h3>{{ searchQuery ? 'Resultados de búsqueda' : 'Nuevos Lanzamientos' }}</h3>
@@ -90,27 +116,6 @@
         @comment="handleComment"
       />
 
-      <!-- Stats Section -->
-      <div class="stats-section">
-        <h3>Tus Estadísticas</h3>
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">📀</div>
-            <div class="stat-value">{{ stats.totalRatings }}</div>
-            <div class="stat-label">Álbumes Calificados</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">⭐</div>
-            <div class="stat-value">{{ stats.averageRating }}</div>
-            <div class="stat-label">Calificación Promedio</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">🎧</div>
-            <div class="stat-value">{{ stats.uniqueArtists }}</div>
-            <div class="stat-label">Artistas Únicos</div>
-          </div>
-        </div>
-      </div>
     </main>
   </div>
 </template>
@@ -192,6 +197,10 @@ const handleRating = async ({ albumId, rating }) => {
 const handleComment = async ({ albumId, comment, rating }) => {
   console.log(`Comentario para álbum ${albumId}:`, comment, `Rating: ${rating}`)
   await loadUserStats()
+}
+
+const goToMyRatings = () => {
+  router.push('/my-ratings')
 }
 
 const handleLogout = async () => {
@@ -536,6 +545,21 @@ const handleLogout = async () => {
   transform: translateY(-3px);
   border-color: #667eea;
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+.stat-card.clickable {
+  cursor: pointer;
+}
+
+.stat-card.clickable:hover {
+  transform: translateY(-5px);
+  border-color: #667eea;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
+  background: #222;
+}
+
+.stat-card.clickable:active {
+  transform: translateY(-2px);
 }
 
 .stat-icon {
