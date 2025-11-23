@@ -100,6 +100,15 @@ class SpotifyApiHandler(private val httpClient: OkHttpClient) {
         val url = "https://api.spotify.com/v1/search?type=album&q=$encodedQuery"
         return executeGetRequest(url)
     }
+    suspend fun obtenerAlbumsNuevos(): String {
+        val url = "https://api.spotify.com/v1/browse/new-releases?limit=50"
+        return executeGetRequest(url)
+    }
+
+    suspend fun getAlbumDetails(albumId: String): String {
+        val url = "https://api.spotify.com/v1/albums/$albumId"
+        return executeGetRequest(url)
+    }
 
 
 }
