@@ -7,8 +7,19 @@ data class Album(
     val release_date: String?,
     val total_tracks: Int,
     val artists: List<Artist>,
-    val images: List<Image>
+    val images: List<Image>,
+    val averageRating: Double=0.0,
+    val reviewCount: Int=0,
+    val reviews: List<Review>?
 )
+data class Review(
+    val reviewId: String,
+    val userId: String,
+    val userName: String,
+    val rating: Int,
+    val comment: String
+)
+
 
 
 data class Artist(

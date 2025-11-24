@@ -13,6 +13,16 @@ import okhttp3.FormBody
 import java.util.Base64
 import com.example.ratify.data.SpotifyTokenResponse
 import com.google.gson.Gson
+
+
+import com.google.gson.reflect.TypeToken
+import com.example.ratify.data.AlbumListResponse
+import com.example.ratify.data.Review
+import com.example.ratify.data.Album
+
+import com.example.ratify.viewmodels.CURRENT_USER_ID
+import com.example.ratify.viewmodels.CURRENT_USER_NAME
+
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -95,11 +105,69 @@ class SpotifyApiHandler(private val httpClient: OkHttpClient) {
         }
     }
 
+
+    /*
     suspend fun buscarAlbums(query: String): String {
         val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
         val url = "https://api.spotify.com/v1/search?type=album&q=$encodedQuery"
         return executeGetRequest(url)
     }
+    */
+    private val gson = Gson()
+
+    private fun injectarReviewsFalsas(albums: List<Album>): List<Album> {
+        return albums.mapIndexed { index, album ->
+            val otherReviews = listOf(
+                Review("rev_a", "user_101", "María G.", 5, "Un clásico de todos los tiempos"),
+                Review("rev_b", "user_202", "Pedro R.", 3, "Buen Album, pero prefiero los pasados."),
+                Review("rev_c", "user_303", "Laura M.", 2, "No me temrino de gustar.")
+            )
+            val userReview = if (index == 0) {
+                listOf(
+                    Review(
+                        reviewId = "rev_user_${album.id}",
+                        userId = CURRENT_USER_ID,
+                        userName = CURRENT_USER_NAME,
+                        rating = 5,
+                        comment = "Mejor Album de todo el mundo"
+                    )
+                )
+            } else {
+                emptyList()
+            }
+
+            val allReviews = otherReviews + userReview
+            val totalRating = allReviews.sumOf { it.rating }
+            val count = allReviews.size
+            val average = if (count > 0) totalRating.toDouble() / count else 0.0
+            album.copy(
+                averageRating = average,
+                reviewCount = count,
+                reviews = allReviews
+            )
+        }
+    }
+
+
+    suspend fun buscarAlbums(query: String): String {
+        val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+        val url = "https://api.spotify.com/v1/search?type=album&q=$encodedQuery"
+
+        val spotifyJson = executeGetRequest(url)
+
+        val type = object : TypeToken<AlbumListResponse>() {}.type
+        val releasesResponse: AlbumListResponse = gson.fromJson(spotifyJson, type)
+
+        val modifiedAlbums = injectarReviewsFalsas(releasesResponse.albums.items)
+
+
+        val modifiedResponse = releasesResponse.copy(
+            albums = releasesResponse.albums.copy(items = modifiedAlbums)
+        )
+
+        return gson.toJson(modifiedResponse)
+    }
+
     suspend fun obtenerAlbumsNuevos(): String {
         val url = "https://api.spotify.com/v1/browse/new-releases?limit=50"
         return executeGetRequest(url)
