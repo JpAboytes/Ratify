@@ -12,12 +12,17 @@ data class Album(
     val reviewCount: Int=0,
     val reviews: List<Review>?
 )
+data class AlbumRatings(
+    val averageRating: Double = 0.0,
+    val reviewCount: Int = 0,
+    val reviews: List<Review> = emptyList()
+)
 data class Review(
-    val reviewId: String,
-    val userId: String,
-    val userName: String,
-    val rating: Int,
-    val comment: String
+    val reviewId: String = "",
+    val userId: String = "",
+    val userName: String = "",
+    val rating: Int = 0,
+    val comment: String = ""
 )
 
 
@@ -61,4 +66,12 @@ data class HomeData(
     val albums: List<Album> = emptyList(),
     val isSearching: Boolean = false,
     val searchPerformed: Boolean = false
+)
+data class UserAlbumRating(
+    val albumId: String = "",
+    val rating: Int = 0
+)
+
+data class UserProfileData(
+    val albums: List<UserAlbumRating> = emptyList()
 )

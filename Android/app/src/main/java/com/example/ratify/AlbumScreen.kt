@@ -1,4 +1,6 @@
 package com.example.ratify
+import android.content.ContentValues.TAG
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,8 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.ratify.data.Album
 import com.example.ratify.data.Review
-import com.example.ratify.viewmodels.CURRENT_USER_ID
-import com.example.ratify.viewmodels.CURRENT_USER_NAME
+
 import com.example.ratify.viewmodels.AlbumDetailViewModel
 import com.example.ratify.viewmodels.AlbumDetailViewModelFactory
 
@@ -38,9 +39,7 @@ fun AlbumDetailScreen(
     album: Album,
     onBack: () -> Unit,
     onSaveReview: (Album, Int, String, String?) -> Unit,
-    viewModel: AlbumDetailViewModel = viewModel(
-        factory = AlbumDetailViewModelFactory(album)
-    )
+    viewModel: AlbumDetailViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -75,8 +74,8 @@ fun AlbumDetailScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            AlbumHeader(album)
-            AverageRatingSection(album.averageRating, album.reviewCount)
+            AlbumHeader(album = uiState.album)
+            AverageRatingSection(uiState.album.averageRating, uiState.album.reviewCount)
 
             ReviewSection(
                 isEditing = uiState.userReview != null,
@@ -86,12 +85,15 @@ fun AlbumDetailScreen(
                 onCommentChange = viewModel::setComment,
                 onSave = {
                     onSaveReview(
-                        album,
+                        uiState.album,
                         uiState.editingRating,
                         uiState.editingComment,
                         uiState.userReview?.reviewId
                     )
-                }
+                },
+                currentUserName = uiState.currentUserName,
+                isSaving = uiState.isSaving,
+                saveError = uiState.saveError
             )
             AllReviewsList(
                 reviews = uiState.album.reviews ?: emptyList(),
@@ -162,7 +164,7 @@ fun AverageRatingSection(averageRating: Double, reviewCount: Int) {
             Column {
                 RatingBarStatic(rating = averageRating.toFloat())
                 Text(
-                    text = "$reviewCount ${if (reviewCount == 1) "Review" else "Review"} totales",
+                    text = "$reviewCount ${if (reviewCount == 1) "Review" else "Reviews"} totales",
                     color = TextLight,
                     fontSize = 14.sp
                 )
@@ -180,7 +182,10 @@ fun ReviewSection(
     comment: String,
     onRatingChange: (Int) -> Unit,
     onCommentChange: (String) -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    currentUserName: String,
+    isSaving: Boolean,
+    saveError: String?
 ) {
     Column(modifier = Modifier.padding(16.dp)) {
         Text(
@@ -191,11 +196,19 @@ fun ReviewSection(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "Usuario: $CURRENT_USER_NAME",
+            text = "Usuario: $currentUserName",
             color = TextLight,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
+
+        saveError?.let {
+            Text(
+                text = "Error: $it",
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
 
         // Rating de 5 Estrellas
         Row(
@@ -241,10 +254,15 @@ fun ReviewSection(
         // Botón Guardar
         Button(
             onClick = onSave,
+            enabled = !isSaving,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor)
         ) {
-            Text(if (isEditing) "Guardar Cambios" else "Publicar Review", fontWeight = FontWeight.Bold)
+            if (isSaving) {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+            } else {
+                Text(if (isEditing) "Guardar Cambios" else "Publicar Review", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
