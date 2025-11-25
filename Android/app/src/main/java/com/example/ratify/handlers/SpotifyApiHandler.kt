@@ -13,15 +13,14 @@ import okhttp3.FormBody
 import java.util.Base64
 import com.example.ratify.data.SpotifyTokenResponse
 import com.google.gson.Gson
-
+import com.example.ratify.handlers.FirestoreApiHandler
 
 import com.google.gson.reflect.TypeToken
 import com.example.ratify.data.AlbumListResponse
 import com.example.ratify.data.Review
 import com.example.ratify.data.Album
-
-import com.example.ratify.viewmodels.CURRENT_USER_ID
-import com.example.ratify.viewmodels.CURRENT_USER_NAME
+import android.util.Log
+import kotlinx.coroutines.*
 
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -114,39 +113,31 @@ class SpotifyApiHandler(private val httpClient: OkHttpClient) {
     }
     */
     private val gson = Gson()
+    private val firestoreHandler = FirestoreApiHandler()
+    private suspend fun injectarReviewsDesdeFirebase(albums: List<Album>): List<Album> {
 
-    private fun injectarReviewsFalsas(albums: List<Album>): List<Album> {
-        return albums.mapIndexed { index, album ->
-            val otherReviews = listOf(
-                Review("rev_a", "user_101", "María G.", 5, "Un clásico de todos los tiempos"),
-                Review("rev_b", "user_202", "Pedro R.", 3, "Buen Album, pero prefiero los pasados."),
-                Review("rev_c", "user_303", "Laura M.", 2, "No me temrino de gustar.")
-            )
-            val userReview = if (index == 0) {
-                listOf(
-                    Review(
-                        reviewId = "rev_user_${album.id}",
-                        userId = CURRENT_USER_ID,
-                        userName = CURRENT_USER_NAME,
-                        rating = 5,
-                        comment = "Mejor Album de todo el mundo"
-                    )
-                )
-            } else {
-                emptyList()
+        return coroutineScope {
+            val deferredAlbums = albums.map { album ->
+                async(Dispatchers.IO) {
+                    try {
+                        val ratingsData = firestoreHandler.getAlbumRatings(album.id)
+
+                        return@async album.copy(
+                            averageRating = ratingsData.averageRating,
+                            reviewCount = ratingsData.reviewCount,
+                            reviews = ratingsData.reviews
+                        )
+                    } catch (e: Exception) {
+                        Log.e("FirebaseInjector", "Fallo al obtener reviews para ${album.id}", e)
+                        return@async album
+                    }
+                }
             }
 
-            val allReviews = otherReviews + userReview
-            val totalRating = allReviews.sumOf { it.rating }
-            val count = allReviews.size
-            val average = if (count > 0) totalRating.toDouble() / count else 0.0
-            album.copy(
-                averageRating = average,
-                reviewCount = count,
-                reviews = allReviews
-            )
+            deferredAlbums.awaitAll()
         }
     }
+
 
 
     suspend fun buscarAlbums(query: String): String {
@@ -158,7 +149,7 @@ class SpotifyApiHandler(private val httpClient: OkHttpClient) {
         val type = object : TypeToken<AlbumListResponse>() {}.type
         val releasesResponse: AlbumListResponse = gson.fromJson(spotifyJson, type)
 
-        val modifiedAlbums = injectarReviewsFalsas(releasesResponse.albums.items)
+        val modifiedAlbums = injectarReviewsDesdeFirebase(releasesResponse.albums.items)
 
 
         val modifiedResponse = releasesResponse.copy(
@@ -170,13 +161,16 @@ class SpotifyApiHandler(private val httpClient: OkHttpClient) {
 
     suspend fun obtenerAlbumsNuevos(): String {
         val url = "https://api.spotify.com/v1/browse/new-releases?limit=50"
-        return executeGetRequest(url)
-    }
+        var spotifyJson= executeGetRequest(url)
+        val type = object : TypeToken<AlbumListResponse>() {}.type
+        val releasesResponse: AlbumListResponse = gson.fromJson(spotifyJson, type)
 
-    suspend fun getAlbumDetails(albumId: String): String {
-        val url = "https://api.spotify.com/v1/albums/$albumId"
-        return executeGetRequest(url)
-    }
+        val modifiedAlbums = injectarReviewsDesdeFirebase(releasesResponse.albums.items)
 
+        val modifiedResponse = releasesResponse.copy(
+            albums = releasesResponse.albums.copy(items = modifiedAlbums)
+        )
+        return gson.toJson(modifiedResponse)
+    }
 
 }

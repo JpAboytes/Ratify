@@ -1,58 +1,153 @@
 package com.example.ratify.viewmodels
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import com.example.ratify.data.Album
 import com.example.ratify.data.Review
+import com.example.ratify.handlers.FirestoreApiHandler
+import com.example.ratify.handlers.AuthHandler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import android.util.Log
+
 data class AlbumDetailUiState(
     val album: Album,
     val rating: Int = 0,
     val currentUserId: String,
+    val currentUserName: String,
     val comment: String = "",
     val userReview: Review?,
     val editingRating: Int,
     val editingComment: String,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    val saveError: String? = null
 )
-const val CURRENT_USER_ID = "user_123"
-const val CURRENT_USER_NAME = "Paul Cruz"
 
 class AlbumDetailViewModel(
-    album: Album
+    album: Album,
+    private val firestoreHandler: FirestoreApiHandler,
+    private val authHandler: AuthHandler
 ) : ViewModel() {
-    private val userReview = album.reviews?.find { it.userId == CURRENT_USER_ID }
 
+    private val initialAlbum = album
+
+    private val actualUserId = authHandler.getCurrentUserId() ?: "Anonimo"
+
+    private val actualUserName = authHandler.getCurrentUserId()?.let { uid ->
+        authHandler.auth.currentUser?.email?.substringBefore('@') ?: "User_${uid.substring(0, 4)}"
+    } ?: "Anonimo"
+
+    private val userReview = initialAlbum.reviews?.find { it.userId == actualUserId }
 
     private val _uiState = MutableStateFlow(
         AlbumDetailUiState(
-            album = album,
-            currentUserId = CURRENT_USER_ID,
+            album = initialAlbum,
+            currentUserId = actualUserId,
+            currentUserName = actualUserName,
             userReview = userReview,
             editingRating = userReview?.rating ?: 0,
-            editingComment = userReview?.comment ?: ""
+            editingComment = userReview?.comment ?: "",
+            saveError = null
         )
     )
     val uiState: StateFlow<AlbumDetailUiState> = _uiState
 
+    init {
+        loadAlbumRatings()
+    }
+
+    private fun loadAlbumRatings() {
+        viewModelScope.launch {
+            try {
+                val ratingsData = firestoreHandler.getAlbumRatings(initialAlbum.id)
+                val updatedAlbum = initialAlbum.copy(
+                    averageRating = ratingsData.averageRating,
+                    reviewCount = ratingsData.reviewCount,
+                    reviews = ratingsData.reviews
+                )
+
+                val freshUserReview = ratingsData.reviews.find { it.userId == actualUserId }
+
+                _uiState.update {
+                    it.copy(
+                        album = updatedAlbum,
+                        userReview = freshUserReview,
+                        editingRating = freshUserReview?.rating ?: it.editingRating,
+                        editingComment = freshUserReview?.comment ?: it.editingComment
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Error al cargar ratings en init", e)
+            }
+        }
+    }
+
     fun setRating(newRating: Int) {
         val safeRating = newRating.coerceIn(0, 5)
-        _uiState.update { it.copy(editingRating = safeRating) }
+        _uiState.update { it.copy(editingRating = safeRating, saveError = null) }
     }
 
     fun setComment(newComment: String) {
-        _uiState.update { it.copy(editingComment = newComment) }
+        _uiState.update { it.copy(editingComment = newComment, saveError = null) }
+    }
+
+    fun saveReview(onSuccess: () -> Unit) {
+        val uiStateValue = _uiState.value
+        
+        if (uiStateValue.currentUserId == "Anonimo") {
+            _uiState.update { it.copy(saveError = "Debes iniciar sesión para publicar una review.") }
+            return
+        }
+
+        if (uiStateValue.editingRating == 0) {
+            _uiState.update { it.copy(saveError = "Debes asignar al menos 1 estrella.") }
+            return
+        }
+
+        val reviewId = "${uiStateValue.currentUserId}_${uiStateValue.album.id}"
+
+        val reviewToSave = Review(
+            reviewId = reviewId,
+            userId = uiStateValue.currentUserId,
+            userName = uiStateValue.currentUserName,
+            rating = uiStateValue.editingRating,
+            comment = uiStateValue.editingComment.trim()
+        )
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true, saveError = null) }
+
+            try {
+                firestoreHandler.postReview(
+                    albumId = uiStateValue.album.id,
+                    newReview = reviewToSave
+                )
+
+                loadAlbumRatings()
+
+                onSuccess()
+
+            } catch (e: Exception) {
+                Log.e("AlbumDetailViewModel", "Error al guardar review", e)
+                _uiState.update { it.copy(isSaving = false, saveError = "Error al guardar: ${e.message}") }
+            }
+        }
     }
 }
 
 class AlbumDetailViewModelFactory(
-    private val album: Album
+    private val album: Album,
+    private val firestoreHandler: FirestoreApiHandler,
+    private val authHandler: AuthHandler
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AlbumDetailViewModel::class.java)) {
-            return AlbumDetailViewModel(album) as T
+            return AlbumDetailViewModel(album, firestoreHandler, authHandler) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
