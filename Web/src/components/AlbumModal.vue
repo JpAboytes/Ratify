@@ -59,7 +59,7 @@
               :disabled="!userComment.trim()"
               class="save-comment-button"
             >
-              Guardar Comentario
+              Guardar
             </button>
             <p v-if="commentSaved" class="comment-saved">✓ Comentario guardado</p>
           </div>
@@ -386,6 +386,7 @@ const formatDuration = (ms) => {
   cursor: pointer;
   transition: all 0.2s ease;
   opacity: 0.3;
+  color: #fff;
 }
 
 .star-button:hover,
