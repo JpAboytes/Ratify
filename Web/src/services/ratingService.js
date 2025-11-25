@@ -1,23 +1,14 @@
-import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore'
 import { app } from '../firebase'
 
 const db = getFirestore(app)
 
-/**
- * Estructura de Firestore:
- * users/{userId}/ratings = {
- *   albums: {
- *     {albumId}: {
- *       albumName, artistName, albumImage, rating, comment, updatedAt
- *     }
- *   }
- * }
- */
 
 /**
  * Guarda o actualiza un rating de un álbum
  * @param {Object} ratingData - Datos del rating
  * @param {string} ratingData.userId - ID del usuario
+ * @param {string} ratingData.userName - Nombre del usuario
  * @param {string} ratingData.albumId - ID del álbum en Spotify
  * @param {string} ratingData.albumName - Nombre del álbum
  * @param {string} ratingData.artistName - Nombre del artista
@@ -27,44 +18,85 @@ const db = getFirestore(app)
  */
 export async function saveRating(ratingData) {
   try {
-    const { userId, albumId, albumName, artistName, albumImage, rating, comment = '' } = ratingData
+    const { userId, userName, albumId, albumName, artistName, albumImage, rating, comment = '' } = ratingData
 
-    const userRatingsRef = doc(db, 'users', userId)
-    
-    // Obtener el documento actual del usuario
-    const userDoc = await getDoc(userRatingsRef)
-    
-    const albumData = {
-      albumName,
-      artistName,
-      albumImage,
+    // 1. Actualizar o crear documento del álbum en ratings
+    const albumRatingRef = doc(db, 'ratings', albumId)
+    const albumDoc = await getDoc(albumRatingRef)
+
+    const reviewId = `${userId}_${albumId}`
+    const now = new Date()
+    const newReview = {
+      userId,
+      userName,
       rating,
       comment,
-      updatedAt: serverTimestamp()
+      reviewId,
+      createdAt: now 
     }
 
-    if (userDoc.exists()) {
-      // Actualizar el documento existente con el nuevo rating
-      const currentAlbums = userDoc.data().albums || {}
-      currentAlbums[albumId] = albumData
+    if (albumDoc.exists()) {
+      const currentData = albumDoc.data()
+      const reviews = currentData.reviews || []
       
-      await updateDoc(userRatingsRef, {
-        albums: currentAlbums,
+      // Buscar si el usuario ya tiene un review
+      const existingReviewIndex = reviews.findIndex(r => r.userId === userId)
+      
+      if (existingReviewIndex !== -1) {
+        // Actualizar review existente, manteniendo la fecha de creación original si existe
+        reviews[existingReviewIndex] = {
+          ...newReview,
+          createdAt: reviews[existingReviewIndex].createdAt || now
+        }
+      } else {
+        // Agregar nuevo review
+        reviews.push(newReview)
+      }
+
+      // Recalcular promedio
+      const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0)
+      const averageRating = totalRating / reviews.length
+
+      await updateDoc(albumRatingRef, {
+        reviews,
+        averageRating: parseFloat(averageRating.toFixed(1)),
+        reviewCount: reviews.length,
         lastUpdated: serverTimestamp()
       })
-      console.log('Rating actualizado correctamente')
     } else {
-      // Crear nuevo documento para el usuario
-      await setDoc(userRatingsRef, {
-        albums: {
-          [albumId]: albumData
-        },
+      // Crear nuevo documento para el álbum
+      await setDoc(albumRatingRef, {
+        albumName,
+        artistName,
+        albumImage,
+        averageRating: rating,
+        reviewCount: 1,
+        reviews: [newReview],
         createdAt: serverTimestamp(),
         lastUpdated: serverTimestamp()
       })
-      console.log('Rating guardado correctamente')
     }
 
+    // 2. Actualizar lista de álbumes calificados del usuario
+    const userRef = doc(db, 'users', userId)
+    const userDoc = await getDoc(userRef)
+
+    if (userDoc.exists()) {
+      await updateDoc(userRef, {
+        ratedAlbums: arrayUnion(albumId),
+        userName,
+        lastUpdated: serverTimestamp()
+      })
+    } else {
+      await setDoc(userRef, {
+        ratedAlbums: [albumId],
+        userName,
+        createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp()
+      })
+    }
+
+    console.log('Rating guardado correctamente')
     return { success: true }
   } catch (error) {
     console.error('Error al guardar rating:', error)
@@ -75,26 +107,46 @@ export async function saveRating(ratingData) {
 /**
  * Obtiene todos los ratings de un usuario
  * @param {string} userId - ID del usuario
- * @returns {Promise<Array>} Array de ratings
+ * @returns {Promise<Array>} Array de ratings con info completa del álbum
  */
 export async function getUserRatings(userId) {
   try {
-    const userRatingsRef = doc(db, 'users', userId)
-    const userDoc = await getDoc(userRatingsRef)
+    const userRef = doc(db, 'users', userId)
+    const userDoc = await getDoc(userRef)
 
-    if (!userDoc.exists() || !userDoc.data().albums) {
+    if (!userDoc.exists() || !userDoc.data().ratedAlbums) {
       return []
     }
 
-    const albums = userDoc.data().albums
+    const ratedAlbumIds = userDoc.data().ratedAlbums
     const ratings = []
 
-    // Convertir el objeto de álbumes a un array
-    for (const [albumId, albumData] of Object.entries(albums)) {
-      ratings.push({
-        albumId,
-        ...albumData
-      })
+    // Obtener información completa de cada álbum calificado
+    for (const albumId of ratedAlbumIds) {
+      const albumRatingRef = doc(db, 'ratings', albumId)
+      const albumDoc = await getDoc(albumRatingRef)
+
+      if (albumDoc.exists()) {
+        const albumData = albumDoc.data()
+        
+        // Encontrar el review específico de este usuario
+        const userReview = albumData.reviews?.find(r => r.userId === userId)
+
+        if (userReview) {
+          ratings.push({
+            albumId,
+            albumName: albumData.albumName,
+            artistName: albumData.artistName,
+            albumImage: albumData.albumImage,
+            rating: userReview.rating,
+            comment: userReview.comment,
+            updatedAt: userReview.createdAt,
+            // Incluir también los datos globales del álbum
+            averageRating: albumData.averageRating,
+            reviewCount: albumData.reviewCount
+          })
+        }
+      }
     }
 
     // Ordenar por fecha de actualización (más recientes primero)
@@ -119,19 +171,22 @@ export async function getUserRatings(userId) {
  */
 export async function getAlbumRating(userId, albumId) {
   try {
-    const userRatingsRef = doc(db, 'users', userId)
-    const userDoc = await getDoc(userRatingsRef)
+    const albumRatingRef = doc(db, 'ratings', albumId)
+    const albumDoc = await getDoc(albumRatingRef)
 
-    if (!userDoc.exists() || !userDoc.data().albums) {
+    if (!albumDoc.exists() || !albumDoc.data().reviews) {
       return null
     }
 
-    const albumRating = userDoc.data().albums[albumId]
+    const reviews = albumDoc.data().reviews
+    const userReview = reviews.find(r => r.userId === userId)
     
-    if (albumRating) {
+    if (userReview) {
       return {
         albumId,
-        ...albumRating
+        rating: userReview.rating,
+        comment: userReview.comment,
+        createdAt: userReview.createdAt
       }
     }
 
@@ -159,7 +214,7 @@ export async function getUserStats(userId) {
       }
     }
 
-    // Calcular promedio de ratings
+    // Calcular promedio de ratings del usuario
     const totalRating = ratings.reduce((sum, r) => sum + r.rating, 0)
     const averageRating = (totalRating / ratings.length).toFixed(1)
 
@@ -173,6 +228,30 @@ export async function getUserStats(userId) {
     }
   } catch (error) {
     console.error('Error al calcular estadísticas:', error)
+    throw error
+  }
+}
+
+/**
+ * Obtiene todos los reviews de un álbum (de todos los usuarios)
+ * @param {string} albumId - ID del álbum en Spotify
+ * @returns {Promise<Object|null>} Datos completos del álbum con todos sus reviews
+ */
+export async function getAlbumReviews(albumId) {
+  try {
+    const albumRatingRef = doc(db, 'ratings', albumId)
+    const albumDoc = await getDoc(albumRatingRef)
+
+    if (!albumDoc.exists()) {
+      return null
+    }
+
+    return {
+      albumId,
+      ...albumDoc.data()
+    }
+  } catch (error) {
+    console.error('Error al cargar reviews del álbum:', error)
     throw error
   }
 }

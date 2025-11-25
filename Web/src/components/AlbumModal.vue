@@ -89,6 +89,39 @@
         </div>
       </div>
 
+      <!-- All Reviews Section -->
+      <div v-if="albumReviews && albumReviews.reviews?.length > 0" class="all-reviews-section">
+        <div class="reviews-header">
+          <h3>Reseñas de la comunidad</h3>
+          <div class="album-rating-summary">
+            <span class="average-rating">{{ albumReviews.averageRating }}</span>
+            <div class="rating-stars">
+              <span v-for="star in 5" :key="star" class="star">
+                {{ star <= Math.round(albumReviews.averageRating) ? '⭐' : '☆' }}
+              </span>
+            </div>
+            <span class="review-count">{{ albumReviews.reviewCount }} {{ albumReviews.reviewCount === 1 ? 'reseña' : 'reseñas' }}</span>
+          </div>
+        </div>
+        
+        <div class="reviews-list">
+          <div 
+            v-for="review in albumReviews.reviews" 
+            :key="review.reviewId"
+            class="review-item"
+            :class="{ 'own-review': review.userId === user?.uid }"
+          >
+            <div class="review-header">
+              <span class="reviewer-name">{{ review.userName }}</span>
+              <div class="review-rating">
+                <span v-for="star in review.rating" :key="star" class="star-filled">⭐</span>
+              </div>
+            </div>
+            <p v-if="review.comment" class="review-comment">{{ review.comment }}</p>
+          </div>
+        </div>
+      </div>
+
       <div v-if="loading" class="loading-tracks">
         <div class="spinner"></div>
         <p>Cargando canciones...</p>
@@ -101,7 +134,7 @@
 import { ref, onMounted } from 'vue'
 import { spotifyApi } from '../services/spotify'
 import { useAuth } from '../composables/useAuth'
-import { saveRating, getAlbumRating } from '../services/ratingService'
+import { saveRating, getAlbumRating, getAlbumReviews } from '../services/ratingService'
 
 const props = defineProps({
   album: {
@@ -120,10 +153,12 @@ const hoverRating = ref(0)
 const userComment = ref('')
 const commentSaved = ref(false)
 const saving = ref(false)
+const albumReviews = ref(null)
 
 onMounted(async () => {
   await loadAlbumDetails()
   await loadExistingRating()
+  await loadAllReviews()
 })
 
 const loadAlbumDetails = async () => {
@@ -152,6 +187,15 @@ const loadExistingRating = async () => {
   }
 }
 
+const loadAllReviews = async () => {
+  try {
+    const reviews = await getAlbumReviews(props.album.id)
+    albumReviews.value = reviews
+  } catch (error) {
+    console.error('Error al cargar reviews:', error)
+  }
+}
+
 const setRating = async (rating) => {
   userRating.value = rating
   
@@ -160,6 +204,7 @@ const setRating = async (rating) => {
   try {
     await saveRating({
       userId: user.value.uid,
+      userName: user.value.displayName || user.value.email?.split('@')[0] || 'Usuario',
       albumId: props.album.id,
       albumName: props.album.name,
       artistName: props.album.artists?.map(a => a.name).join(', ') || 'Unknown',
@@ -168,6 +213,7 @@ const setRating = async (rating) => {
       comment: userComment.value
     })
     emit('rate', { albumId: props.album.id, rating })
+    await loadAllReviews() // Recargar reviews después de guardar
   } catch (error) {
     console.error('Error al guardar rating:', error)
   }
@@ -180,6 +226,7 @@ const saveComment = async () => {
   try {
     await saveRating({
       userId: user.value.uid,
+      userName: user.value.displayName || user.value.email?.split('@')[0] || 'Usuario',
       albumId: props.album.id,
       albumName: props.album.name,
       artistName: props.album.artists?.map(a => a.name).join(', ') || 'Unknown',
@@ -198,6 +245,8 @@ const saveComment = async () => {
     setTimeout(() => {
       commentSaved.value = false
     }, 3000)
+    
+    await loadAllReviews() // Recargar reviews después de guardar
   } catch (error) {
     console.error('Error al guardar comentario:', error)
   } finally {
@@ -477,6 +526,111 @@ const formatDuration = (ms) => {
 .track-duration {
   color: #666;
   font-size: 0.9rem;
+}
+
+/* All Reviews Section */
+.all-reviews-section {
+  border-top: 1px solid #333;
+  padding-top: 30px;
+  margin-top: 30px;
+}
+
+.reviews-header {
+  margin-bottom: 25px;
+}
+
+.reviews-header h3 {
+  color: #fff;
+  font-size: 1.5rem;
+  margin: 0 0 15px;
+}
+
+.album-rating-summary {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: #222;
+  padding: 15px 20px;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.average-rating {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: #667eea;
+}
+
+.rating-stars {
+  display: flex;
+  gap: 2px;
+}
+
+.rating-stars .star {
+  font-size: 1.2rem;
+}
+
+.review-count {
+  color: #999;
+  font-size: 0.95rem;
+  margin-left: auto;
+}
+
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.review-item {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.review-item:hover {
+  border-color: #667eea;
+  transform: translateX(5px);
+}
+
+.review-item.own-review {
+  border-left: 4px solid #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.reviewer-name {
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.review-item.own-review .reviewer-name {
+  color: #667eea;
+}
+
+.review-rating {
+  display: flex;
+  gap: 2px;
+}
+
+.star-filled {
+  font-size: 1rem;
+}
+
+.review-comment {
+  color: #ccc;
+  margin: 0;
+  line-height: 1.5;
+  font-size: 0.95rem;
 }
 
 .loading-tracks {
