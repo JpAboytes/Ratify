@@ -35,7 +35,7 @@ coverage
 # Vitest
 __screenshots__/
 
-#apikeys
-src/firebase.js
-src/services/spotify.js
-
+# Environment variables
+.env
+.env.local
+.env.*.local
