@@ -82,13 +82,27 @@ export async function saveRating(ratingData) {
     const userDoc = await getDoc(userRef)
 
     if (userDoc.exists()) {
+      const currentAlbums = userDoc.data().albums || []
+      
+      // Buscar si el álbum ya existe
+      const existingAlbumIndex = currentAlbums.findIndex(a => a.albumId === albumId)
+      
+      if (existingAlbumIndex !== -1) {
+        // Actualizar rating existente
+        currentAlbums[existingAlbumIndex].rating = rating
+      } else {
+        // Agregar nuevo álbum
+        currentAlbums.push({ albumId, rating })
+      }
+      
       await updateDoc(userRef, {
-        Albums: arrayUnion(albumId),
+        albums: currentAlbums,
         userName,
+        lastUpdated: serverTimestamp()
       })
     } else {
       await setDoc(userRef, {
-        Albums: [albumId],
+        albums: [{ albumId, rating }],
         userName
       })
     }
@@ -111,15 +125,16 @@ export async function getUserRatings(userId) {
     const userRef = doc(db, 'users', userId)
     const userDoc = await getDoc(userRef)
 
-    if (!userDoc.exists() || !userDoc.data().Albums) {
+    if (!userDoc.exists() || !userDoc.data().albums) {
       return []
     }
 
-    const ratedAlbumIds = userDoc.data().Albums
+    const ratedAlbums = userDoc.data().albums || []
     const ratings = []
 
     // Obtener información completa de cada álbum calificado
-    for (const albumId of ratedAlbumIds) {
+    for (const albumEntry of ratedAlbums) {
+      const { albumId } = albumEntry
       const albumRatingRef = doc(db, 'ratings', albumId)
       const albumDoc = await getDoc(albumRatingRef)
 
