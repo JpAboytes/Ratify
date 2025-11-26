@@ -137,14 +137,19 @@ class AlbumDetailViewModel(
             rating = uiStateValue.editingRating,
             comment = uiStateValue.editingComment.trim()
         )
-
+        val albumImage = uiStateValue.album.images.firstOrNull()?.url ?: ""
+        val albumName = uiStateValue.album.name
+        val artistName = uiStateValue.album.artists.firstOrNull()?.name ?: "Artista Desconocido"
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, saveError = null) }
 
             try {
                 firestoreHandler.postReview(
                     albumId = uiStateValue.album.id,
-                    newReview = reviewToSave
+                    newReview = reviewToSave,
+                    albumImage = albumImage,
+                    albumName = albumName,
+                    artistName = artistName,
                 )
 
                 loadAlbumRatings()

@@ -47,7 +47,7 @@ class FirestoreApiHandler {
                 }
         }
     }
-    suspend fun postReview(albumId: String, newReview: Review) {
+    suspend fun postReview(albumId: String, newReview: Review,albumImage: String, albumName: String, artistName: String) {
 
         val albumDocRef = db.collection(RATINGS_COLLECTION).document(albumId)
         val userDocRef = db.collection(USERS_COLLECTION).document(newReview.userId)
@@ -71,12 +71,18 @@ class FirestoreApiHandler {
                 val totalSum = mutableReviews.sumOf { it.rating }
                 val newAverage = if (totalCount > 0) totalSum.toDouble() / totalCount else 0.0
 
-                val updatedAlbumData = hashMapOf(
+                val updatedAlbumData = hashMapOf<String, Any>(
                     "reviewCount" to totalCount,
                     "averageRating" to newAverage,
-                    "reviews" to mutableReviews
+                    "reviews" to mutableReviews,
+                    "albumImage" to albumImage,
+                    "albumName" to albumName,
+                    "artistName" to artistName,
+                    "lastUpdatedAt" to FieldValue.serverTimestamp()
                 )
-
+                if (!snapshot.exists()) {
+                    updatedAlbumData["createdAt"] = FieldValue.serverTimestamp()
+                }
                 transaction.set(albumDocRef, updatedAlbumData)
                 null
             }.await()

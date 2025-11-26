@@ -78,7 +78,16 @@ fun AuthScreen(
                 color = Color.White,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
-
+            if (!uiState.isLoginMode) {
+                OutlinedTextField(
+                    value = uiState.userName,
+                    onValueChange = viewModel::setUserName,
+                    label = { Text("Nombre de Usuario") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = getAuthTextFieldColors()
+                )
+            }
             OutlinedTextField(
                 value = uiState.email,
                 onValueChange = viewModel::setEmail,

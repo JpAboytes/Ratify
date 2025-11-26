@@ -60,7 +60,9 @@ class AuthViewModel(
                         _uiState.update { it.copy(isLoading = false, error = "El nombre de usuario no puede estar vacío.") }
                         return@launch
                     }
-                    authHandler.signUp(state.email, state.password)
+                    val userId = authHandler.signUp(state.email, state.password)
+
+                    firestoreHandler.saveUserName(userId, state.userName.trim())
                 }
                 _uiState.update { it.copy(isLoading = false) }
                 onSuccess()
