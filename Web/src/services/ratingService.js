@@ -83,16 +83,13 @@ export async function saveRating(ratingData) {
 
     if (userDoc.exists()) {
       await updateDoc(userRef, {
-        ratedAlbums: arrayUnion(albumId),
+        Albums: arrayUnion(albumId),
         userName,
-        lastUpdated: serverTimestamp()
       })
     } else {
       await setDoc(userRef, {
-        ratedAlbums: [albumId],
-        userName,
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp()
+        Albums: [albumId],
+        userName
       })
     }
 
@@ -114,11 +111,11 @@ export async function getUserRatings(userId) {
     const userRef = doc(db, 'users', userId)
     const userDoc = await getDoc(userRef)
 
-    if (!userDoc.exists() || !userDoc.data().ratedAlbums) {
+    if (!userDoc.exists() || !userDoc.data().Albums) {
       return []
     }
 
-    const ratedAlbumIds = userDoc.data().ratedAlbums
+    const ratedAlbumIds = userDoc.data().Albums
     const ratings = []
 
     // Obtener información completa de cada álbum calificado
