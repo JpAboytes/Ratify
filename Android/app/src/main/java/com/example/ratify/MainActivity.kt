@@ -17,31 +17,46 @@ import com.example.ratify.ui.screens.HomeScreen
 import com.example.ratify.ui.theme.RatifyTheme
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SegmentedButtonDefaults.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.ratify.data.Album
 import com.example.ratify.ui.screens.AuthScreen
 import com.example.ratify.handlers.AuthHandler
 import com.example.ratify.handlers.FirestoreApiHandler
-import com.example.ratify.ui.screens.BackgroundColor
+import com.example.ratify.ui.screens.ProfileScreen
 import com.example.ratify.viewmodels.HomeViewModel
 import com.example.ratify.viewmodels.AlbumDetailViewModelFactory
 import com.example.ratify.viewmodels.AlbumDetailViewModel
+import com.example.ratify.viewmodels.ProfileViewModel
+import com.example.ratify.viewmodels.ProfileViewModelFactory
+import com.google.firebase.auth.FirebaseAuth
 import okhttp3.OkHttpClient
+import com.example.ratify.ui.screens.AlbumDetailScreen
 
 sealed class Screen {
     object Auth : Screen()
     object Home : Screen()
     data class Detail(val album: Album) : Screen()
+    object Account : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -68,15 +83,73 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val homeViewModelFactory = HomeViewModelFactory(spotifyApiHandler)
-        val context = this
+
 
         val initialScreen = if (authHandler.isUserLoggedIn()) Screen.Home else Screen.Auth
 
         setContent {
-            RatifyTheme {
-                var currentScreen by remember { mutableStateOf<Screen>(initialScreen) }
+            val context = LocalContext.current
+            var currentScreen by remember { mutableStateOf<Screen>(initialScreen) }
 
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            val currentFirebaseUser = remember { mutableStateOf(authHandler.auth.currentUser) }
+            DisposableEffect(authHandler) {
+                val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+                    currentFirebaseUser.value = auth.currentUser
+                }
+                authHandler.auth.addAuthStateListener(authStateListener)
+                onDispose {
+                    authHandler.auth.removeAuthStateListener(authStateListener)
+                }
+            }
+
+            val topBar: @Composable () -> Unit = {
+                if (currentScreen is Screen.Home ) {
+                    val user = currentFirebaseUser.value
+                    val isLoggedIn = user != null
+
+                    val displayName = user?.run {
+                        displayName ?: email?.substringBefore('@') ?: "User_${uid.substring(0, 4)}"
+                    } ?: ""
+
+                    TopAppBar(
+                        title = { Text("Ratify", color = Color.White) },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = com.example.ratify.ui.screens.CardColor),
+                        actions = {
+                            if (isLoggedIn) {
+                                AccountButton(
+                                    photoUrl = user?.photoUrl?.toString(),
+                                    displayName = displayName,
+                                    onClick = { currentScreen = Screen.Account }
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    authHandler.signOut()
+                                    currentScreen = Screen.Auth
+                                    Toast.makeText(context, "Sesión cerrada", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = "Cerrar sesión",
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+
+
+            RatifyTheme {
+
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = com.example.ratify.ui.screens.BackgroundColor,
+                    topBar = topBar
+                ) { innerPadding ->
+                    val currentUserId = currentFirebaseUser.value?.uid ?: "GUEST_SESSION"
+
                     when (val screen = currentScreen) {
                         is Screen.Auth -> {
                             AuthScreen(
@@ -94,38 +167,6 @@ class MainActivity : ComponentActivity() {
                                     currentScreen = Screen.Detail(album)
                                 }
                             )
-                            Scaffold(
-                                containerColor = com.example.ratify.ui.screens.BackgroundColor,
-                                topBar = {
-                                    TopAppBar(
-                                        title = { Text("Ratify", color = Color.White) },
-                                        colors = TopAppBarDefaults.topAppBarColors(containerColor = CardColor),
-                                        actions = {
-                                            IconButton(
-                                                onClick = {
-                                                    authHandler.signOut()
-                                                    currentScreen = Screen.Auth
-                                                    Toast.makeText(context, "Sesión cerrada", Toast.LENGTH_SHORT).show()
-                                                }
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.ExitToApp,
-                                                    contentDescription = "Cerrar sesión",
-                                                    tint = Color.White
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                            ) { homePadding ->
-                                HomeScreen(
-                                    modifier = Modifier.padding(homePadding),
-                                    viewModel = viewModel(factory = homeViewModelFactory),
-                                    onAlbumClick = { album ->
-                                        currentScreen = Screen.Detail(album)
-                                    }
-                                )
-                            }
                         }
                         is Screen.Detail -> {
                             val album = screen.album
@@ -147,7 +188,11 @@ class MainActivity : ComponentActivity() {
                                 onSaveReview = { _, _, _, _ ->
                                     detailViewModel.saveReview(
                                         onSuccess = {
-                                            Toast.makeText(context, "¡Review Guardada con éxito!", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(
+                                                context,
+                                                "¡Review Guardada con éxito!",
+                                                Toast.LENGTH_LONG
+                                            ).show()
                                             currentScreen = Screen.Home
                                         }
                                     )
@@ -155,9 +200,68 @@ class MainActivity : ComponentActivity() {
                                 viewModel = detailViewModel
                             )
                         }
+                        is Screen.Account -> {
+                            val profileViewModel: ProfileViewModel = viewModel(
+                                key = currentUserId,
+                                factory = ProfileViewModelFactory(
+                                    authHandler = authHandler,
+                                    firestoreHandler = firestoreApiHandler,
+                                    spotifyApiHandler = spotifyApiHandler
+                                )
+                            )
+                            ProfileScreen(
+                                viewModel = profileViewModel,
+                                onBack = {
+                                    currentScreen = Screen.Home
+                                }
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun InitialPlaceholder(displayName: String) {
+    val TAG = "AccountButton"
+    val initial = displayName.firstOrNull()?.toString()?.uppercase() ?: ""
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(com.example.ratify.ui.screens.PrimaryColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = initial,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        )
+    }
+}
+
+@Composable
+fun AccountButton(photoUrl: String?, displayName: String, onClick: () -> Unit) {
+    val TAG = "AccountButton"
+    Log.d(TAG,"[AccountButton] Entrando. URL: ${photoUrl?.take(50)}")
+
+    IconButton(onClick = onClick, modifier = Modifier.padding(horizontal = 4.dp)) {
+
+        if (photoUrl != null && photoUrl.isNotBlank()) {
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = "Foto de perfil de $displayName",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+            )
+        } else {
+            Log.d(TAG,"[AccountButton] No hay URL, usando placeholder.")
+            InitialPlaceholder(displayName)
         }
     }
 }

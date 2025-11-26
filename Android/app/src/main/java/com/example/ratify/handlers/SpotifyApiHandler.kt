@@ -1,5 +1,6 @@
 package com.example.ratify.handlers
 
+import android.content.ContentValues.TAG
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -172,5 +173,15 @@ class SpotifyApiHandler(private val httpClient: OkHttpClient) {
         )
         return gson.toJson(modifiedResponse)
     }
-
+    suspend fun obtenerAlbumPorId(albumId: String): Album? {
+        Log.d(TAG,albumId)
+        val url = "https://api.spotify.com/v1/albums/$albumId"
+        try {
+            val albumJson = executeGetRequest(url)
+            return gson.fromJson(albumJson, Album::class.java)
+        } catch (e: Exception) {
+            Log.e("SpotifyApiHandler", "Fallo al obtener álbum $albumId", e)
+            return null
+        }
+    }
 }

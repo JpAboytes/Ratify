@@ -1,6 +1,4 @@
-package com.example.ratify
-import android.content.ContentValues.TAG
-import android.util.Log
+package com.example.ratify.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,19 +17,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.ratify.data.Album
 import com.example.ratify.data.Review
 
 import com.example.ratify.viewmodels.AlbumDetailViewModel
-import com.example.ratify.viewmodels.AlbumDetailViewModelFactory
 
-val PrimaryColor = Color(0xFF667eea)
-val BackgroundColor = Color(0xFF000000)
-val CardColor = Color(0xFF1a1a1a)
-val TextLight = Color(0xFF999999)
-val TextFaded = Color(0xFF666666)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

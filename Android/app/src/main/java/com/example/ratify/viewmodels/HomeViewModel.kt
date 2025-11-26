@@ -2,7 +2,6 @@ package com.example.ratify.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.ratify.data.Album
 import com.example.ratify.data.AlbumListResponse
 import com.example.ratify.data.UiState
 import com.example.ratify.handlers.SpotifyApiHandler

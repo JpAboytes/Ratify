@@ -73,5 +73,6 @@ data class UserAlbumRating(
 )
 
 data class UserProfileData(
+    val userName: String = "Anonimo",
     val albums: List<UserAlbumRating> = emptyList()
 )

@@ -1,6 +1,5 @@
 package com.example.ratify.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -16,9 +15,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ratify.handlers.AuthHandler
 import com.example.ratify.viewmodels.AuthViewModel
 import com.example.ratify.viewmodels.AuthViewModelFactory
-import com.example.ratify.CardColor
-import com.example.ratify.BackgroundColor
-import com.example.ratify.PrimaryColor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -27,6 +23,7 @@ import com.google.android.gms.common.api.ApiException
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import androidx.compose.ui.graphics.SolidColor
+import com.example.ratify.handlers.FirestoreApiHandler
 private const val WEB_CLIENT_ID = "231048600556-88sij8v4769v8k7eraoodtpkltajpgl9.apps.googleusercontent.com"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,8 +32,9 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit
 ) {
     val context = LocalContext.current
+    val firestoreHandler = remember { FirestoreApiHandler() }
     val viewModel: AuthViewModel = viewModel(
-        factory = AuthViewModelFactory(authHandler)
+        factory = AuthViewModelFactory(authHandler,firestoreHandler)
     )
     val uiState by viewModel.uiState.collectAsState()
     val gso = remember {
@@ -45,6 +43,7 @@ fun AuthScreen(
             .requestEmail()
             .build()
     }
+
     val googleSignInClient = remember { GoogleSignIn.getClient(context, gso) }
 
     val googleLauncher = rememberLauncherForActivityResult(

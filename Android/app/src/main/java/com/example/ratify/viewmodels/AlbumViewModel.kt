@@ -36,9 +36,6 @@ class AlbumDetailViewModel(
 
     private val actualUserId = authHandler.getCurrentUserId() ?: "Anonimo"
 
-    private val actualUserName = authHandler.getCurrentUserId()?.let { uid ->
-        authHandler.auth.currentUser?.email?.substringBefore('@') ?: "User_${uid.substring(0, 4)}"
-    } ?: "Anonimo"
 
     private val userReview = initialAlbum.reviews?.find { it.userId == actualUserId }
 
@@ -46,7 +43,7 @@ class AlbumDetailViewModel(
         AlbumDetailUiState(
             album = initialAlbum,
             currentUserId = actualUserId,
-            currentUserName = actualUserName,
+            currentUserName = "Cargando...",
             userReview = userReview,
             editingRating = userReview?.rating ?: 0,
             editingComment = userReview?.comment ?: "",
@@ -56,7 +53,30 @@ class AlbumDetailViewModel(
     val uiState: StateFlow<AlbumDetailUiState> = _uiState
 
     init {
+        loadUserName()
         loadAlbumRatings()
+    }
+    private fun loadUserName() {
+        if (actualUserId == "Anonimo") return
+
+        viewModelScope.launch {
+            try {
+                val profile = firestoreHandler.getUserProfile(actualUserId)
+
+                val userNameFromFirestore = profile.userName.ifBlank {
+                    authHandler.auth.currentUser?.email?.substringBefore('@') ?: "Usuario"
+                }
+                _uiState.update {
+                    it.copy(currentUserName = userNameFromFirestore)
+                }
+
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Error al cargar nombre de usuario de Firestore", e)
+
+                val fallbackName = authHandler.auth.currentUser?.email?.substringBefore('@') ?: "Usuario"
+                _uiState.update { it.copy(currentUserName = fallbackName) }
+            }
+        }
     }
 
     private fun loadAlbumRatings() {
@@ -128,7 +148,7 @@ class AlbumDetailViewModel(
                 )
 
                 loadAlbumRatings()
-
+                _uiState.update { it.copy(isSaving = false) }
                 onSuccess()
 
             } catch (e: Exception) {

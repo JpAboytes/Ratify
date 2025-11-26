@@ -14,6 +14,8 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.example.ratify.data.UserAlbumRating
 import com.example.ratify.data.UserProfileData
 import com.google.firebase.firestore.FieldValue
+import kotlin.collections.set
+
 class FirestoreApiHandler {
 
     private val db = FirebaseFirestore.getInstance()
@@ -113,6 +115,35 @@ class FirestoreApiHandler {
             throw e
         }
     }
+    suspend fun saveUserName(userId: String, userName: String) {
+        val userDocRef = db.collection(USERS_COLLECTION).document(userId)
+        try {
+            userDocRef.set(mapOf("userName" to userName), com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            Log.d(TAG, "Nombre de usuario '$userName' guardado con éxito para $userId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al guardar el nombre de usuario para $userId", e)
+            throw e
+        }
+    }
+    suspend fun getUserProfile(userId: String): UserProfileData {
+        val documentRef = db.collection(USERS_COLLECTION).document(userId)
+        return try {
+            val document = documentRef.get().await()
+
+            if (document.exists()) {
+                document.toObject(UserProfileData::class.java) ?: UserProfileData()
+            } else {
+                val initialProfile = UserProfileData()
+                documentRef.set(initialProfile).await()
+                Log.d(TAG, "Perfil de usuario inicial creado para $userId")
+                initialProfile
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al obtener/crear perfil de usuario para $userId", e)
+            throw e
+        }
+    }
 }
 class AuthHandler {
 
@@ -148,7 +179,6 @@ class AuthHandler {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             auth.signInWithCredential(credential).await()
-            Log.d(TAG, "Login exitoso con Google")
             auth.currentUser?.uid ?: throw IllegalStateException("UID nulo después del login de Google.")
         } catch (e: Exception) {
             Log.e(TAG, "Error durante el login con Google", e)

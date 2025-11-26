@@ -8,17 +8,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.ratify.handlers.FirestoreApiHandler
+
+
 
 data class AuthUiState(
     val email: String = "",
     val password: String = "",
+    val userName: String = "",
     val isLoginMode: Boolean = true,
     val isLoading: Boolean = false,
     val error: String? = null
 )
 
 class AuthViewModel(
-    private val authHandler: AuthHandler
+    private val authHandler: AuthHandler,
+    private val firestoreHandler: FirestoreApiHandler
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -51,10 +56,14 @@ class AuthViewModel(
                 if (state.isLoginMode) {
                     authHandler.signIn(state.email, state.password)
                 } else {
+                    if (uiState.value.userName.isBlank()) {
+                        _uiState.update { it.copy(isLoading = false, error = "El nombre de usuario no puede estar vacío.") }
+                        return@launch
+                    }
                     authHandler.signUp(state.email, state.password)
                 }
                 _uiState.update { it.copy(isLoading = false) }
-                onSuccess() // Navegar a Home
+                onSuccess()
             } catch (e: Exception) {
                 val errorMessage = e.localizedMessage ?: "Error de autenticación desconocido."
                 _uiState.update { it.copy(isLoading = false, error = errorMessage) }
@@ -65,7 +74,15 @@ class AuthViewModel(
         _uiState.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             try {
-                authHandler.signInWithGoogleToken(idToken)
+                val userId = authHandler.signInWithGoogleToken(idToken)
+
+                val googleUser = authHandler.auth.currentUser
+                val googleName = googleUser?.displayName
+                    ?: googleUser?.email?.substringBefore('@')
+                    ?: "Usuario Google"
+                
+                firestoreHandler.saveUserName(userId, googleName)
+
                 _uiState.update { it.copy(isLoading = false) }
                 onSuccess()
             } catch (e: Exception) {
@@ -74,16 +91,20 @@ class AuthViewModel(
             }
         }
     }
+    fun setUserName(newName: String) {
+        _uiState.update { it.copy(userName = newName, error = null) }
+    }
 
 }
 
 class AuthViewModelFactory(
-    private val authHandler: AuthHandler
+    private val authHandler: AuthHandler,
+    private val firestoreHandler: FirestoreApiHandler
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
-            return AuthViewModel(authHandler) as T
+            return AuthViewModel(authHandler,firestoreHandler) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
